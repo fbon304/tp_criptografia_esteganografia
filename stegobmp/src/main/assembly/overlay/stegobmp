@@ -1,0 +1,8 @@
+#!/bin/bash
+
+PATH_TO_CODE_BASE="$(cd "$(dirname "$0")" && pwd)"
+MAIN_CLASS="stegobmp.Main"
+
+exec java $JAVA_OPTS \
+    -cp "$PATH_TO_CODE_BASE/lib/jars/*" \
+    "$MAIN_CLASS" "$@"
