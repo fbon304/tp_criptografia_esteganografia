@@ -1,4 +1,4 @@
-# tp_criptografia_esteganografia
+# TRABAJO PRÁCTICO DE IMPLEMENTACIÓN: ESTEGANOGRAFÍA
 
 Implementación del parser CLI de `stegobmp` con Java 21, Maven y picocli.
 Por ahora el programa únicamente valida argumentos: no realiza esteganografía,
