@@ -1,8 +1,15 @@
 # TRABAJO PRÁCTICO DE IMPLEMENTACIÓN: ESTEGANOGRAFÍA
 
-Implementación del parser CLI de `stegobmp` con Java 21, Maven y picocli.
-Por ahora el programa únicamente valida argumentos: no realiza esteganografía,
-cifrado, estegoanálisis ni lectura o escritura de archivos BMP.
+Implementación de `stegobmp` con Java 21, Maven y picocli.
+Permite ocultar y extraer archivos con LSB1 y LSB4 sin cifrado en BMP V3 de 24 bits
+sin compresión. LSBI, cifrado y estegoanálisis están pendientes.
+
+## Estructura
+
+En `stegobmp/src/main/java/stegobmp/`: `Main` inicia el programa, `cli/` valida
+argumentos y `StegoService` coordina las operaciones. `bmp/` lee y escribe BMP,
+`payload/` arma e interpreta el formato oculto, `steg/` contiene los algoritmos
+y `crypto/` tiene los metodos de cifrado de OpenSSL. Los tests están en `stegobmp/src/test/java/` y la consigna en `docs/`.
 
 ## Compilación y ejecución
 
@@ -77,19 +84,18 @@ invoca el programa; también se pueden indicar rutas absolutas.
 
 ## Reglas del parser
 
-- Exactamente una operación: `-embed` o `-extract`.
+- Exactamente una operación: `-embed` oculta un archivo; `-extract` lo recupera.
 - `-p`, `-out` y `-steg` son obligatorios en ambas operaciones.
-- `-in` es obligatorio con `-embed` y no se admite con `-extract`.
-- `-steg`: `LSB1`, `LSB4` o `LSBI`.
-- `-a`: `aes128`, `aes192`, `aes256` o `3des`; por defecto `aes128`.
-- `-m`: `ecb`, `cfb`, `ofb` o `cbc`; por defecto `cbc`.
+- `-p`: ruta del BMP portador.
+- `-out`: ruta con nombre del BMP de salida al ocultar; al extraer, nombre base
+  al que se agrega la extensión recuperada. La carpeta debe existir.
+- `-in`: archivo a ocultar; obligatorio con `-embed` y no se admite con `-extract`.
+- `-steg`: algoritmo de esteganografía: `LSB1`, `LSB4` o `LSBI`.
+- `-a`: algoritmo de cifrado: `aes128`, `aes192`, `aes256` o `3des`; por defecto `aes128`.
+- `-m`: modo de cifrado: `ecb`, `cfb`, `ofb` o `cbc`; por defecto `cbc`.
+- `-pass`: contraseña para cifrar o descifrar.
 - Solo la presencia de `-pass` habilita cifrado/descifrado en la configuración.
   Sin contraseña, `-a` y `-m` no lo habilitan. Una contraseña explícita no puede estar vacía.
 - Se respetan mayúsculas y minúsculas. Se rechazan opciones desconocidas,
   opciones repetidas, valores faltantes, rutas vacías y argumentos sueltos.
 - `-h` y `--help` muestran la ayuda.
-
-`new CliParser().parse(args)` devuelve `Optional<CliArguments>`: vacío al pedir
-ayuda, o una configuración tipada al validar correctamente. Si hay un error lanza
-`CommandLine.ParameterException`. `CliArguments.encryptionEnabled()` indica si
-se proporcionó una contraseña; `input()` es `null` al extraer.
