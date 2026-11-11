@@ -2,6 +2,8 @@ package stegobmp;
 
 import stegobmp.bmp.BmpImage;
 import stegobmp.cli.CliArguments;
+import stegobmp.crypto.CryptoException;
+import stegobmp.crypto.CryptoService;
 import stegobmp.payload.PayloadCodec;
 import stegobmp.steg.Lsb1;
 import stegobmp.steg.Lsb4;
@@ -15,13 +17,9 @@ import java.util.Arrays;
 public final class StegoService {
     private static final int MINIMUM_EXTENSION_LENGTH = 2;
     private final PayloadCodec codec = new PayloadCodec();
+    private final CryptoService cryptoService = new CryptoService();
 
     public void execute(CliArguments arguments) throws IOException {
-        if (arguments.encryptionEnabled()) {
-            // TODO: Quitar este if cuando embed y extract integren CryptoServcie.
-            throw new UnsupportedOperationException("El cifrado y descifrado todavía no están implementados");
-        }
-
         Steganography algorithm = switch (arguments.steganography()) {
             case LSB1 -> new Lsb1();
             case LSB4 -> new Lsb4();
@@ -44,12 +42,11 @@ public final class StegoService {
             throw new IllegalArgumentException("El archivo a ocultar debe tener una extensión");
         }
         byte[] payload = codec.encodePlain(Files.readAllBytes(arguments.input()), filename.substring(dot));
-        // TODO: Integrar CryptoServcie para cifrar y envolver el payload antes de controlar la capacidad.
-        // if (arguments.encryptionEnabled()) {
-        //     byte[] ciphertext = cryptoService.encrypt(payload, arguments.cipher(),
-        //             arguments.mode(), arguments.password());
-        //     payload = codec.encodeEncrypted(ciphertext);
-        // }
+        if (arguments.encryptionEnabled()) {
+            byte[] ciphertext = cryptoService.encrypt(payload, arguments.cipher(),
+                    arguments.mode(), arguments.password());
+            payload = codec.encodeEncrypted(ciphertext);
+        }
         long capacity = algorithm.capacity(carrier);
         if (payload.length > capacity) {
             throw new IllegalArgumentException("El archivo no cabe en el portador. Capacidad máxima: "
@@ -64,37 +61,10 @@ public final class StegoService {
             throw new IllegalArgumentException("El portador no tiene capacidad para el tamaño del payload");
         }
         long size = codec.readSize(algorithm.extract(carrier, Integer.BYTES));
-        // TODO: Integrar CryptoServcie con esta rama y dejar la extracción sin cifrado en el else, compartiendo el guardado final.
-        PayloadCodec.DecodedPayload payload;
-        // if (arguments.encryptionEnabled()) {
-        //     long encryptedLength = Integer.BYTES + size;
-        //     if (encryptedLength > capacity) {
-        //         throw new IllegalArgumentException("El tamaño cifrado excede la capacidad del portador");
-        //     }
-        //     byte[] encryptedPayload = algorithm.extract(carrier, (int) encryptedLength);
-        //     byte[] ciphertext = codec.decodeEncrypted(encryptedPayload);
-        //     byte[] plain = cryptoService.decrypt(ciphertext, arguments.cipher(),
-        //             arguments.mode(), arguments.password());
-        //     payload = codec.decodePlain(plain);
-        // } else {
-        //     // Extracción sin cifrado actual, asignando payload sin volver a declararlo.
-        // }
-        // // Guardado común desde String extension = payload.extension().
-        // else {
-            if (Integer.BYTES + size + MINIMUM_EXTENSION_LENGTH > capacity) {
-                throw new IllegalArgumentException("El tamaño oculto excede la capacidad del portador");
-            }
+        PayloadCodec.DecodedPayload payload = arguments.encryptionEnabled()
+                ? extractEncrypted(arguments, carrier, algorithm, capacity, size)
+                : extractPlain(carrier, algorithm, capacity, size);
 
-            byte[] recovered = algorithm.extract(carrier, (int) capacity);
-            int extensionEnd = Integer.BYTES + (int) size;
-            while (extensionEnd < recovered.length && recovered[extensionEnd] != 0) {
-                extensionEnd++;
-            }
-            if (extensionEnd == recovered.length) {
-                throw new IllegalArgumentException("La extensión oculta no tiene terminador NUL");
-            }
-            payload = codec.decodePlain(Arrays.copyOf(recovered, extensionEnd + 1));
-        //}
         String extension = payload.extension();
         if (extension.indexOf('/') >= 0 || extension.indexOf('\\') >= 0) {
             throw new IllegalArgumentException("La extensión oculta no puede contener separadores de ruta");
@@ -102,5 +72,38 @@ public final class StegoService {
         Path output = arguments.output();
         Path destination = output.resolveSibling(output.getFileName().toString() + extension);
         Files.write(destination, payload.content());
+    }
+
+    /** El tamaño oculto es el del cifrado; al descifrar se obtiene tamaño real || datos || extensión. */
+    private PayloadCodec.DecodedPayload extractEncrypted(CliArguments arguments, byte[] carrier,
+                                                         Steganography algorithm, long capacity, long size) {
+        if (Integer.BYTES + size > capacity) {
+            throw new IllegalArgumentException("El tamaño cifrado excede la capacidad del portador");
+        }
+        byte[] ciphertext = codec.decodeEncrypted(algorithm.extract(carrier, Integer.BYTES + (int) size));
+        byte[] plain = cryptoService.decrypt(ciphertext, arguments.cipher(), arguments.mode(),
+                arguments.password());
+        try {
+            return codec.decodePlain(plain);
+        } catch (IllegalArgumentException exception) {
+            // En CFB y OFB no hay padding: una contraseña incorrecta se detecta recién acá.
+            throw new CryptoException(CryptoException.DECRYPTION_FAILED, exception);
+        }
+    }
+
+    private PayloadCodec.DecodedPayload extractPlain(byte[] carrier, Steganography algorithm,
+                                                     long capacity, long size) {
+        if (Integer.BYTES + size + MINIMUM_EXTENSION_LENGTH > capacity) {
+            throw new IllegalArgumentException("El tamaño oculto excede la capacidad del portador");
+        }
+        byte[] recovered = algorithm.extract(carrier, (int) capacity);
+        int extensionEnd = Integer.BYTES + (int) size;
+        while (extensionEnd < recovered.length && recovered[extensionEnd] != 0) {
+            extensionEnd++;
+        }
+        if (extensionEnd == recovered.length) {
+            throw new IllegalArgumentException("La extensión oculta no tiene terminador NUL");
+        }
+        return codec.decodePlain(Arrays.copyOf(recovered, extensionEnd + 1));
     }
 }

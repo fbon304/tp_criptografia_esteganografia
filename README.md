@@ -1,15 +1,15 @@
 # TRABAJO PRÁCTICO DE IMPLEMENTACIÓN: ESTEGANOGRAFÍA
 
 Implementación de `stegobmp` con Java 21, Maven y picocli.
-Permite ocultar y extraer archivos con LSB1 y LSB4 sin cifrado en BMP V3 de 24 bits
-sin compresión. LSBI, cifrado y estegoanálisis están pendientes.
+Permite ocultar y extraer archivos con LSB1 y LSB4, con o sin cifrado, en BMP V3 de
+24 bits sin compresión. LSBI y estegoanálisis están pendientes.
 
 ## Estructura
 
 En `stegobmp/src/main/java/stegobmp/`: `Main` inicia el programa, `cli/` valida
 argumentos y `StegoService` coordina las operaciones. `bmp/` lee y escribe BMP,
 `payload/` arma e interpreta el formato oculto, `steg/` contiene los algoritmos
-y `crypto/` tiene los metodos de cifrado de OpenSSL. Los tests están en `stegobmp/src/test/java/` y la consigna en `docs/`.
+y `crypto/` cifra y descifra con JCE de forma compatible con OpenSSL. Los tests están en `stegobmp/src/test/java/` y la consigna en `docs/`.
 
 ## Compilación y ejecución
 
@@ -99,3 +99,18 @@ invoca el programa; también se pueden indicar rutas absolutas.
 - Se respetan mayúsculas y minúsculas. Se rechazan opciones desconocidas,
   opciones repetidas, valores faltantes, rutas vacías y argumentos sueltos.
 - `-h` y `--help` muestran la ayuda.
+
+## Cifrado
+
+Se implementa con JCE (incluido en el JDK) y produce el mismo resultado que
+`openssl enc -<cifrado> -pbkdf2 -iter 10000 -md sha256 -S 0000000000000000 -pass pass:<password>`.
+
+- Clave e IV: PBKDF2 con HMAC-SHA256, 10000 iteraciones y salt de 8 bytes en cero.
+  De la salida se toman primero los bytes de la clave y luego los del IV.
+- Algoritmos: `aes128`, `aes192`, `aes256` (IV de 16 bytes) y `3des`
+  (DES-EDE3 con clave de 24 bytes e IV de 8).
+- Modos: `ecb` y `cbc` con padding PKCS5; `cfb` es CFB de 8 bits (`cfb8` en
+  OpenSSL) y `ofb` usa el tamaño de bloque (128 bits en AES); estos dos no usan padding.
+- Se oculta `tamaño del cifrado || cifrado(tamaño real || datos || extensión)`.
+- Si la contraseña, el algoritmo o el modo no coinciden con los usados al ocultar,
+  la extracción falla con un mensaje de error y no escribe la salida.

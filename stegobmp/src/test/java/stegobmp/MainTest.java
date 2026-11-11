@@ -55,14 +55,58 @@ class MainTest {
     }
 
     @Test
-    void passwordAndLsbiFailExplicitlyWithoutWritingOutput() {
-        for (String[] options : new String[][]{{"-steg", "LSB1", "-pass", "secret"}, {"-steg", "LSBI"}}) {
-            String[] arguments = {"-extract", "-p", "missing.bmp", "-out", directory.resolve("out").toString()};
-            String[] combined = Arrays.copyOf(arguments, arguments.length + options.length);
-            System.arraycopy(options, 0, combined, arguments.length, options.length);
-            assertNotEquals(0, run(combined));
-        }
+    void lsbiFailsExplicitlyWithoutWritingOutput() {
+        assertNotEquals(0, run("-extract", "-p", "missing.bmp", "-out", directory.resolve("out").toString(),
+                "-steg", "LSBI"));
         assertFalse(Files.exists(directory.resolve("out")));
+    }
+
+    @Test
+    void encryptedRoundTripWithStatementSyntaxAndDefaults() throws Exception {
+        Path carrier = directory.resolve("imagen1.bmp");
+        Files.write(carrier, bitmap());
+        Path input = directory.resolve("mensaje1.txt");
+        byte[] content = "hola".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        Files.write(input, content);
+        String[][] cipherOptions = {
+                {"-a", "3des", "-m", "cbc", "-pass", "oculto"},
+                {"-pass", "oculto"},
+                {"-a", "aes256", "-pass", "oculto"},
+                {"-m", "ofb", "-pass", "oculto"}
+        };
+        for (String[] options : cipherOptions) {
+            Path embedded = directory.resolve("imagenmas1.bmp");
+            Path output = directory.resolve("mensaje1");
+            assertEquals(0, run(concat(new String[]{"-embed", "-in", input.toString(), "-p", carrier.toString(),
+                    "-out", embedded.toString(), "-steg", "LSB4"}, options)), String.join(" ", options));
+            assertEquals(0, run(concat(new String[]{"-extract", "-p", embedded.toString(),
+                    "-out", output.toString(), "-steg", "LSB4"}, options)), String.join(" ", options));
+            Path recovered = directory.resolve("mensaje1.txt");
+            assertArrayEquals(content, Files.readAllBytes(recovered));
+        }
+    }
+
+    @Test
+    void wrongPasswordReportsErrorAndFails() throws Exception {
+        Path carrier = directory.resolve("imagen1.bmp");
+        Files.write(carrier, bitmap());
+        Path input = directory.resolve("mensaje1.bin");
+        Files.write(input, new byte[]{1, 2, 3});
+        Path embedded = directory.resolve("imagenmas1.bmp");
+        assertEquals(0, run("-embed", "-in", input.toString(), "-p", carrier.toString(),
+                "-out", embedded.toString(), "-steg", "LSB4", "-pass", "oculto"));
+        StringWriter errors = new StringWriter();
+        int status = Main.run(new String[]{"-extract", "-p", embedded.toString(),
+                        "-out", directory.resolve("salida").toString(), "-steg", "LSB4", "-pass", "otra"},
+                new PrintWriter(new StringWriter()), new PrintWriter(errors));
+        assertNotEquals(0, status);
+        assertTrue(errors.toString().contains("contraseña, algoritmo o modo incorrectos"));
+    }
+
+    private static String[] concat(String[] first, String[] second) {
+        String[] combined = Arrays.copyOf(first, first.length + second.length);
+        System.arraycopy(second, 0, combined, first.length, second.length);
+        return combined;
     }
 
     private int run(String... arguments) {
