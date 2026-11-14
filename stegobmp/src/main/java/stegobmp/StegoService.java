@@ -7,6 +7,7 @@ import stegobmp.crypto.CryptoService;
 import stegobmp.payload.PayloadCodec;
 import stegobmp.steg.Lsb1;
 import stegobmp.steg.Lsb4;
+import stegobmp.steg.Lsbi;
 import stegobmp.steg.Steganography;
 
 import java.io.IOException;
@@ -23,8 +24,7 @@ public final class StegoService {
         Steganography algorithm = switch (arguments.steganography()) {
             case LSB1 -> new Lsb1();
             case LSB4 -> new Lsb4();
-            // TODO: Conectar la implementación de LSBI cuando esté disponible.
-            case LSBI -> throw new UnsupportedOperationException("LSBI todavía no está implementado");
+            case LSBI -> new Lsbi();
         };
         BmpImage image = BmpImage.read(arguments.carrier());
         byte[] carrier = image.body();

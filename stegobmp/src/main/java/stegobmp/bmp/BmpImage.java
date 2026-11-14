@@ -78,8 +78,10 @@ public class BmpImage {
         }
 
         ByteBuffer header = ByteBuffer.wrap(fileBytes).order(ByteOrder.LITTLE_ENDIAN);
-        if (header.getInt(DIB_SIZE_POSITION) != DIB_HEADER_SIZE) {
-            throw new IOException("Solo se admiten archivos BMP V3 con encabezado DIB de 40 bytes");
+        // V3 tiene un encabezado DIB de 40 bytes. V4 y V5 lo extienden (108 y 124 bytes) conservando
+        // los mismos primeros 40, así que se aceptan: los píxeles se ubican con el offset del encabezado.
+        if (header.getInt(DIB_SIZE_POSITION) < DIB_HEADER_SIZE) {
+            throw new IOException("Solo se admiten archivos BMP V3 o posteriores (encabezado DIB de al menos 40 bytes)");
         }
         if (header.getInt(WIDTH_POSITION) <= 0 || header.getInt(HEIGHT_POSITION) == 0
                 || header.getInt(HEIGHT_POSITION) == Integer.MIN_VALUE) {

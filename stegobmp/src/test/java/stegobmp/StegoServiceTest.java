@@ -24,11 +24,14 @@ class StegoServiceTest {
     private final StegoService service = new StegoService();
 
     @Test
-    void exactCapacityAndEmptyFilesRoundTripWithBothAlgorithms() throws Exception {
-        for (SteganographyAlgorithm algorithm : new SteganographyAlgorithm[]{SteganographyAlgorithm.LSB1,
-                SteganographyAlgorithm.LSB4}) {
-            // 192 carrier bytes hold 24 payload bytes in LSB1 and 96 in LSB4.
-            int capacity = algorithm == SteganographyAlgorithm.LSB1 ? 24 : 96;
+    void exactCapacityAndEmptyFilesRoundTripWithEveryAlgorithm() throws Exception {
+        for (SteganographyAlgorithm algorithm : SteganographyAlgorithm.values()) {
+            // 192 carrier bytes hold 24 payload bytes in LSB1, 96 in LSB4 and 15 in LSBI.
+            int capacity = switch (algorithm) {
+                case LSB1 -> 24;
+                case LSB4 -> 96;
+                case LSBI -> 15;
+            };
             for (int length : new int[]{0, capacity - 9}) {
                 byte[] content = new byte[length];
                 Arrays.fill(content, (byte) 255);
@@ -88,10 +91,10 @@ class StegoServiceTest {
     }
 
     @Test
-    void reportsUnavailableFeaturesAndMissingCarrier() {
+    void reportsMissingCarrier() {
         Path missing = directory.resolve("missing.bmp");
         Path output = directory.resolve("out");
-        assertThrows(UnsupportedOperationException.class, () -> service.execute(arguments(Operation.EXTRACT,
+        assertThrows(IOException.class, () -> service.execute(arguments(Operation.EXTRACT,
                 null, missing, output, SteganographyAlgorithm.LSBI, null)));
         assertThrows(IOException.class, () -> service.execute(arguments(Operation.EXTRACT,
                 null, missing, output, SteganographyAlgorithm.LSB1, null)));
@@ -106,8 +109,7 @@ class StegoServiceTest {
         Path input = directory.resolve("secreto.txt");
         Files.write(input, content);
         Path carrier = writeBitmap(new byte[4096]);
-        for (SteganographyAlgorithm algorithm : new SteganographyAlgorithm[]{SteganographyAlgorithm.LSB1,
-                SteganographyAlgorithm.LSB4}) {
+        for (SteganographyAlgorithm algorithm : SteganographyAlgorithm.values()) {
             for (CipherAlgorithm cipher : CipherAlgorithm.values()) {
                 for (CipherMode mode : CipherMode.values()) {
                     Path embedded = directory.resolve("embedded.bmp");
@@ -171,7 +173,7 @@ class StegoServiceTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> service.execute(
                 new CliArguments(Operation.EMBED, input, carrier, output, SteganographyAlgorithm.LSB1,
                         CipherAlgorithm.AES128, CipherMode.CBC, "oculto")));
-        assertTrue(exception.getMessage().contains("Capacidad máxima: 24"));
+        assertTrue(exception.getMessage().contains("Capacidad mÃ¡xima: 24"));
         assertFalse(Files.exists(output));
     }
 

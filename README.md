@@ -1,8 +1,10 @@
 # TRABAJO PRÁCTICO DE IMPLEMENTACIÓN: ESTEGANOGRAFÍA
 
 Implementación de `stegobmp` con Java 21, Maven y picocli.
-Permite ocultar y extraer archivos con LSB1 y LSB4, con o sin cifrado, en BMP V3 de
-24 bits sin compresión. LSBI y estegoanálisis están pendientes.
+Permite ocultar y extraer archivos con LSB1, LSB4 y LSBI, con o sin cifrado, en BMP V3 de
+24 bits sin compresión. También acepta BMP V4 y V5 (encabezado DIB más largo), ubicando los
+píxeles con el offset del encabezado: uno de los archivos de la cátedra (`matrix_.bmp`) es V5.
+`tools/estegoanalisis.py` ayuda con el estegoanálisis.
 
 ## Estructura
 
@@ -114,3 +116,30 @@ Se implementa con JCE (incluido en el JDK) y produce el mismo resultado que
 - Se oculta `tamaño del cifrado || cifrado(tamaño real || datos || extensión)`.
 - Si la contraseña, el algoritmo o el modo no coinciden con los usados al ocultar,
   la extracción falla con un mensaje de error y no escribe la salida.
+
+## Esteganografía
+
+En los tres métodos se usa el cuerpo del BMP en el orden físico del archivo (incluidos
+los bytes de padding de fila) y los bits de cada byte oculto van del más al menos significativo.
+
+- `LSB1`: un bit por byte del portador. Capacidad: `cuerpo / 8` bytes.
+- `LSB4`: cuatro bits por byte del portador. Capacidad: `cuerpo / 2` bytes.
+- `LSBI` (Majeed y Sulaiman): los primeros 4 bytes del cuerpo guardan con LSB1 común si se
+  invirtieron los patrones `00`, `01`, `10` y `11`, en ese orden (el patrón de un byte son su
+  tercer y segundo bit menos significativos). Desde el quinto byte se oculta un bit por byte
+  usando solo azul y verde: se saltea el rojo, es decir, los bytes cuya posición en el cuerpo
+  es 2 módulo 3. Un patrón se invierte cuando el LSB común cambiaría más bytes de ese patrón de
+  los que dejaría iguales. Capacidad: `(cuerpo - cuerpo / 3 - 3) / 8` bytes.
+
+Si el archivo no cabe, el programa informa la capacidad máxima del portador en bytes,
+contando los 4 bytes del tamaño y la extensión.
+
+## Estegoanálisis
+
+```shell
+python3 tools/estegoanalisis.py -o salida archivo1.bmp archivo2.bmp
+```
+
+Para cada BMP prueba LSB1, LSB4 y LSBI: si el tamaño leído es coherente y encuentra la
+extensión, extrae el archivo; si el tamaño es coherente pero no hay extensión, indica que
+probablemente esté cifrado. También avisa si el archivo tiene bytes de más después de los píxeles.
