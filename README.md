@@ -4,7 +4,7 @@ Implementación de `stegobmp` con Java 21, Maven y picocli.
 Permite ocultar y extraer archivos con LSB1, LSB4 y LSBI, con o sin cifrado, en BMP V3 de
 24 bits sin compresión. También acepta BMP V4 y V5 (encabezado DIB más largo), ubicando los
 píxeles con el offset del encabezado: uno de los archivos de la cátedra (`matrix_.bmp`) es V5.
-`tools/estegoanalisis.py` ayuda con el estegoanálisis.
+`Tools/estegoanalisis.py` ayuda con el estegoanálisis.
 
 ## Estructura
 
@@ -28,6 +28,8 @@ cd stegobmp
 ```
 
 ```shell
+chmod u+x mvnw
+chmod u+w . 
 ./mvnw clean package
 ```
 
@@ -86,12 +88,14 @@ invoca el programa; también se pueden indicar rutas absolutas.
 
 ## Reglas del parser
 
-- Exactamente una operación: `-embed` oculta un archivo; `-extract` lo recupera.
-- `-p`, `-out` y `-steg` son obligatorios en ambas operaciones.
+- Exactamente una operación: `-embed` oculta un archivo; `-extract` lo recupera;
+  `-dump` vuelca todos los bytes ocultos sin interpretar el payload ni descifrar.
+- `-p`, `-out` y `-steg` son obligatorios en las tres operaciones.
 - `-p`: ruta del BMP portador.
 - `-out`: ruta con nombre del BMP de salida al ocultar; al extraer, nombre base
-  al que se agrega la extensión recuperada. La carpeta debe existir.
-- `-in`: archivo a ocultar; obligatorio con `-embed` y no se admite con `-extract`.
+  al que se agrega la extensión recuperada; con `-dump`, archivo binario de salida
+  con tantos bytes como la capacidad del portador. La carpeta debe existir.
+- `-in`: archivo a ocultar; obligatorio con `-embed` y no se admite con las otras operaciones.
 - `-steg`: algoritmo de esteganografía: `LSB1`, `LSB4` o `LSBI`.
 - `-a`: algoritmo de cifrado: `aes128`, `aes192`, `aes256` o `3des`; por defecto `aes128`.
 - `-m`: modo de cifrado: `ecb`, `cfb`, `ofb` o `cbc`; por defecto `cbc`.
@@ -136,8 +140,13 @@ contando los 4 bytes del tamaño y la extensión.
 
 ## Estegoanálisis
 
+Primero compilá y descomprimí la distribución según las instrucciones anteriores.
+El script invoca `stegobmp -dump` para probar cada algoritmo; no implementa LSB en Python.
+Busca el ejecutable en `stegobmp/target/stegobmp/stegobmp`, relativo al repositorio,
+y luego en el `PATH`. Si está en otra ubicación, usá `--stegobmp /ruta/al/stegobmp`.
+
 ```shell
-python3 tools/estegoanalisis.py -o salida archivo1.bmp archivo2.bmp
+python3 Tools/estegoanalisis.py -o salida archivo1.bmp archivo2.bmp
 ```
 
 Para cada BMP prueba LSB1, LSB4 y LSBI: si el tamaño leído es coherente y encuentra la
