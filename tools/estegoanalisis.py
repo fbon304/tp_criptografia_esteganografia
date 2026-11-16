@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """Ayuda para el estegoanálisis (punto 6). No forma parte de stegobmp ni hace falta para compilarlo.
 
-Uso: python3 tools/estegoanalisis.py [-o carpeta] [--pass PASSWORD] [--steg LSB1|LSB4|LSBI]
-                                     [--stegobmp RUTA] archivo.bmp [...]
+Uso: python3 tools/estegoanalisis.py [-o carpeta] [--steg LSB1|LSB4|LSBI] [--stegobmp RUTA]
+                                     archivo.bmp [...]
 
 Para cada BMP:
   1. Revisa el encabezado y avisa si el archivo tiene bytes de más después de los píxeles o un
      tamaño distinto al declarado (posible ocultamiento que no es LSB1, LSB4 ni LSBI). Esos bytes
      se guardan aparte para inspeccionarlos con un editor hex.
   2. Prueba LSB1, LSB4 y LSBI ejecutando `stegobmp -extract`: la extracción la hace siempre
-     stegobmp; este script no decodifica nada por su cuenta.
-     - Sin --pass: si stegobmp extrae, el archivo estaba oculto sin cifrar. Si falla porque el
-       tamaño oculto excede la capacidad, ese método no se usó; si falla por otro motivo, el
-       tamaño es coherente pero no hay extensión válida: probablemente esté cifrado.
-     - Con --pass: prueba los 16 pares algoritmo/modo con esa contraseña hasta que uno funcione.
+     stegobmp; este script no decodifica nada por su cuenta. Si stegobmp extrae, el archivo
+     estaba oculto sin cifrar. Si falla porque el tamaño oculto excede la capacidad, ese método
+     no se usó; si falla por otro motivo, el tamaño es coherente pero no hay extensión válida:
+     probablemente esté cifrado. Encontrar algoritmo, modo y contraseña queda para el análisis;
+     una vez conocidos, se extrae directamente con stegobmp.
 
 Por defecto usa el ejecutable que queda al descomprimir la distribución en
 stegobmp/target/stegobmp/stegobmp (ver README); con --stegobmp se indica otra ruta.
@@ -25,8 +25,6 @@ import subprocess
 import sys
 
 METHODS = ('LSB1', 'LSB4', 'LSBI')
-CIPHERS = ('aes128', 'aes192', 'aes256', '3des')
-MODES = ('cbc', 'ecb', 'cfb', 'ofb')
 DEFAULT_STEGOBMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir,
                                 'stegobmp', 'target', 'stegobmp', 'stegobmp')
 # Mensaje de StegoService cuando el tamaño leído no entra en el portador con ese método.
@@ -54,11 +52,9 @@ def check_layout(path, data, outdir):
             print(f'     guardados en {extra}; primeros bytes: {data[expected:expected + 32]!r}')
 
 
-def run_extract(stegobmp, path, out_base, method, cipher=None, mode=None, password=None):
-    """Ejecuta stegobmp -extract y devuelve (archivo generado o None, mensaje de error)."""
+def run_extract(stegobmp, path, out_base, method):
+    """Ejecuta stegobmp -extract sin contraseña y devuelve (archivo generado o None, mensaje de error)."""
     command = [stegobmp, '-extract', '-p', path, '-out', out_base, '-steg', method]
-    if password is not None:
-        command += ['-a', cipher, '-m', mode, '-pass', password]
     directory = os.path.dirname(out_base) or '.'
     before = set(os.listdir(directory))
     result = subprocess.run(command, capture_output=True, text=True)
@@ -72,37 +68,22 @@ def run_extract(stegobmp, path, out_base, method, cipher=None, mode=None, passwo
     return (os.path.join(directory, created[0]) if created else out_base), None
 
 
-def try_methods(stegobmp, path, outdir, methods, password):
+def try_methods(stegobmp, path, outdir, methods):
     for method in methods:
         out_base = os.path.join(outdir, f'{os.path.basename(path)}.{method}')
-        if password is None:
-            output, error = run_extract(stegobmp, path, out_base, method)
-            if output:
-                print(f'   {method}: ENCONTRADO sin cifrar -> {output}')
-            elif CAPACITY_ERROR in error:
-                print(f'   {method}: tamaño incoherente, no se usó este método')
-            else:
-                print(f'   {method}: tamaño coherente pero sin extensión válida; posible cifrado ({error})')
-            continue
-
-        for cipher in CIPHERS:
-            for mode in MODES:
-                output, _ = run_extract(stegobmp, path, out_base, method, cipher, mode, password)
-                if output:
-                    print(f'   {method}: ENCONTRADO con -a {cipher} -m {mode} -pass {password} -> {output}')
-                    break
-            else:
-                continue
-            break
+        output, error = run_extract(stegobmp, path, out_base, method)
+        if output:
+            print(f'   {method}: ENCONTRADO sin cifrar -> {output}')
+        elif CAPACITY_ERROR in error:
+            print(f'   {method}: tamaño incoherente, no se usó este método')
         else:
-            print(f'   {method}: ningún algoritmo/modo funcionó con esa contraseña')
+            print(f'   {method}: tamaño coherente pero sin extensión válida; posible cifrado ({error})')
 
 
 def main(argv):
     parser = argparse.ArgumentParser(description='Estegoanálisis de BMP usando stegobmp para extraer.')
     parser.add_argument('files', nargs='+', metavar='archivo.bmp')
     parser.add_argument('-o', dest='outdir', default='.', help='carpeta de salida (por defecto: actual)')
-    parser.add_argument('--pass', dest='password', help='probar los 16 algoritmos/modos con esta contraseña')
     parser.add_argument('--steg', choices=METHODS, help='probar solo este método')
     parser.add_argument('--stegobmp', default=DEFAULT_STEGOBMP, help='ruta al ejecutable stegobmp')
     args = parser.parse_args(argv)
@@ -118,7 +99,7 @@ def main(argv):
         with open(path, 'rb') as file:
             data = file.read()
         check_layout(path, data, args.outdir)
-        try_methods(stegobmp, path, args.outdir, methods, args.password)
+        try_methods(stegobmp, path, args.outdir, methods)
 
 
 if __name__ == '__main__':

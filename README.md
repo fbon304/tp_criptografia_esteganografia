@@ -4,14 +4,16 @@ Implementación de `stegobmp` con Java 21, Maven y picocli.
 Permite ocultar y extraer archivos con LSB1, LSB4 y LSBI, con o sin cifrado, en BMP V3 de
 24 bits sin compresión. También acepta BMP V4 y V5 (encabezado DIB más largo), ubicando los
 píxeles con el offset del encabezado: uno de los archivos de la cátedra (`matrix_.bmp`) es V5.
-`Tools/estegoanalisis.py` ayuda con el estegoanálisis.
+`tools/estegoanalisis.py` es una herramienta auxiliar (Python) para el estegoanálisis que
+usa `stegobmp` para extraer, no hace falta para compilar ni ejecutar el programa.
 
 ## Estructura
 
 En `stegobmp/src/main/java/stegobmp/`: `Main` inicia el programa, `cli/` valida
 argumentos y `StegoService` coordina las operaciones. `bmp/` lee y escribe BMP,
 `payload/` arma e interpreta el formato oculto, `steg/` contiene los algoritmos
-y `crypto/` cifra y descifra con JCE de forma compatible con OpenSSL. Los tests están en `stegobmp/src/test/java/` y la consigna en `docs/`.
+y `crypto/` cifra y descifra con JCE de forma compatible con OpenSSL. Los tests están en
+`stegobmp/src/test/java/`, la consigna en `docs/` y el script de estegoanálisis en `tools/`.
 
 ## Compilación y ejecución
 
@@ -29,7 +31,7 @@ cd stegobmp
 
 ```shell
 chmod u+x mvnw
-chmod u+w . 
+chmod u+w .
 ./mvnw clean package
 ```
 
@@ -88,14 +90,12 @@ invoca el programa; también se pueden indicar rutas absolutas.
 
 ## Reglas del parser
 
-- Exactamente una operación: `-embed` oculta un archivo; `-extract` lo recupera;
-  `-dump` vuelca todos los bytes ocultos sin interpretar el payload ni descifrar.
-- `-p`, `-out` y `-steg` son obligatorios en las tres operaciones.
+- Exactamente una operación: `-embed` oculta un archivo; `-extract` lo recupera.
+- `-p`, `-out` y `-steg` son obligatorios en ambas operaciones.
 - `-p`: ruta del BMP portador.
 - `-out`: ruta con nombre del BMP de salida al ocultar; al extraer, nombre base
-  al que se agrega la extensión recuperada; con `-dump`, archivo binario de salida
-  con tantos bytes como la capacidad del portador. La carpeta debe existir.
-- `-in`: archivo a ocultar; obligatorio con `-embed` y no se admite con las otras operaciones.
+  al que se agrega la extensión recuperada. La carpeta debe existir.
+- `-in`: archivo a ocultar; obligatorio con `-embed` y no se admite con `-extract`.
 - `-steg`: algoritmo de esteganografía: `LSB1`, `LSB4` o `LSBI`.
 - `-a`: algoritmo de cifrado: `aes128`, `aes192`, `aes256` o `3des`; por defecto `aes128`.
 - `-m`: modo de cifrado: `ecb`, `cfb`, `ofb` o `cbc`; por defecto `cbc`.
@@ -140,15 +140,34 @@ contando los 4 bytes del tamaño y la extensión.
 
 ## Estegoanálisis
 
-Primero compilá y descomprimí la distribución según las instrucciones anteriores.
-El script invoca `stegobmp -dump` para probar cada algoritmo; no implementa LSB en Python.
-Busca el ejecutable en `stegobmp/target/stegobmp/stegobmp`, relativo al repositorio,
-y luego en el `PATH`. Si está en otra ubicación, usá `--stegobmp /ruta/al/stegobmp`.
+`tools/estegoanalisis.py` es una herramienta auxiliar (Python 3.7+, sin dependencias
+externas). No forma parte de `stegobmp` ni hace falta para compilarlo. Toda la extracción la
+hace `stegobmp`: el script lo invoca con `-extract` para cada combinación y no decodifica
+LSB1, LSB4, LSBI ni descifra por su cuenta.
+
+Primero compilá y descomprimí la distribución (secciones anteriores), de modo que exista
+`stegobmp/target/stegobmp/stegobmp`. Si el ejecutable está en otra ubicación, usá
+`--stegobmp /ruta/al/stegobmp`. Desde la raíz del repositorio:
 
 ```shell
-python3 Tools/estegoanalisis.py -o salida archivo1.bmp archivo2.bmp
+python3 tools/estegoanalisis.py -o salida archivo1.bmp archivo2.bmp
 ```
 
-Para cada BMP prueba LSB1, LSB4 y LSBI: si el tamaño leído es coherente y encuentra la
-extensión, extrae el archivo; si el tamaño es coherente pero no hay extensión, indica que
-probablemente esté cifrado. También avisa si el archivo tiene bytes de más después de los píxeles.
+Para cada BMP:
+
+- Revisa el encabezado y avisa si el archivo tiene bytes de más después de los píxeles o un
+  tamaño distinto al declarado. Esos bytes se guardan en `salida/<archivo>.extra.bin` para
+  inspeccionarlos con un editor hexadecimal (ocultamientos que no son LSB1, LSB4 ni LSBI).
+- Ejecuta `stegobmp -extract` con LSB1, LSB4 y LSBI:
+  - si funciona, el archivo recuperado queda en `salida/<archivo>.<método><extensión>`;
+  - si el tamaño oculto excede la capacidad, informa que ese método no se usó;
+  - si el tamaño es coherente pero no hay extensión válida, informa que probablemente esté cifrado.
+
+Una vez identificados el método, el algoritmo, el modo y la contraseña, el archivo se recupera directamente
+con `stegobmp`, por ejemplo:
+
+```shell
+./stegobmp -extract -p "archivo.bmp" -out "salida" -steg LSBI -a aes192 -m ofb -pass "PASSWORD"
+```
+
+`python3 tools/estegoanalisis.py -h` muestra todas las opciones.
