@@ -148,7 +148,7 @@ class StegoServiceTest {
     @Test
     void wrongPasswordFailsWithClearMessageWithoutWritingOutput() throws Exception {
         Path input = directory.resolve("secreto.txt");
-        Files.write(input, "contenido secreto".getBytes(StandardCharsets.US_ASCII));
+        Files.writeString(input, "contenido secreto", StandardCharsets.US_ASCII);
         Path carrier = writeBitmap(new byte[4096]);
         for (CipherMode mode : CipherMode.values()) {
             Path embedded = directory.resolve("embedded.bmp");
@@ -173,7 +173,7 @@ class StegoServiceTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> service.execute(
                 new CliArguments(Operation.EMBED, input, carrier, output, SteganographyAlgorithm.LSB1,
                         CipherAlgorithm.AES128, CipherMode.CBC, "oculto")));
-        assertTrue(exception.getMessage().contains("Capacidad mÃ¡xima: 24"));
+        assertTrue(exception.getMessage().contains("Capacidad máxima: 24"));
         assertFalse(Files.exists(output));
     }
 
